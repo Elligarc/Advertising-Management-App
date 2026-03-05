@@ -13,127 +13,159 @@
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Поиск по названию или адресу..."
+        placeholder="Поиск по адресу..."
         class="search-input"
       >
+      <select v-model="cityFilter" class="select-filter">
+        <option value="all">Все города</option>
+        <option v-for="city in cities" :key="city.id" :value="city.id">
+          {{ city.name }}
+        </option>
+      </select>
+      <select v-model="districtFilter" class="select-filter">
+        <option value="all">Все районы</option>
+        <option v-for="district in filteredDistricts" :key="district.id" :value="district.id">
+          {{ district.name }}
+        </option>
+      </select>
+      <select v-model="formatFilter" class="select-filter">
+        <option value="all">Все форматы</option>
+        <option v-for="format in formats" :key="format.id" :value="format.id">
+          {{ format.name }}
+        </option>
+      </select>
       <select v-model="typeFilter" class="select-filter">
         <option value="all">Все типы</option>
-        <option value="billboard">Билборд 3x6</option>
-        <option value="citylight">Ситилайт</option>
-        <option value="video">Видеоэкран</option>
-        <option value="banner">Баннер</option>
+        <option value="Billboard">Билборд</option>
+        <option value="Poster">Постер</option>
+        <option value="CityLight">Ситилайт</option>
+        <option value="Videoboard">Видеоэкран</option>
       </select>
       <select v-model="statusFilter" class="select-filter">
         <option value="all">Все статусы</option>
-        <option value="free">Свободны</option>
-        <option value="busy">Заняты</option>
-        <option value="repair">В простое</option>
+        <option value="Created">Активна</option>
+        <option value="UnderRepair">На ремонте</option>
+        <option value="Decommissioned">Выведена</option>
+      </select>
+      <select v-model="priceTypeFilter" class="select-filter">
+        <option value="all">Любой тип цены</option>
+        <option value="PerMonth">За месяц</option>
+        <option value="PerShow">За показ</option>
       </select>
       <button class="btn btn-secondary" @click="resetFilters">Сбросить</button>
 
       <div class="view-toggle">
-        <button
-          type="button"
-          class="view-toggle__btn"
-          :class="{ 'view-toggle__btn--active': viewMode === 'normal' }"
-          @click="viewMode = 'normal'"
-        >
+        <button type="button" class="view-toggle__btn" :class="{ 'view-toggle__btn--active': viewMode === 'normal' }" @click="viewMode = 'normal'">
           Крупные карточки
         </button>
-        <button
-          type="button"
-          class="view-toggle__btn"
-          :class="{ 'view-toggle__btn--active': viewMode === 'compact' }"
-          @click="viewMode = 'compact'"
-        >
+        <button type="button" class="view-toggle__btn" :class="{ 'view-toggle__btn--active': viewMode === 'compact' }" @click="viewMode = 'compact'">
           Компактно
         </button>
       </div>
     </div>
 
-    <div class="grid">
+    <div v-if="pending" class="state-msg">Загрузка...</div>
+    <div v-else-if="error" class="state-msg error-msg">Ошибка загрузки поверхностей</div>
+
+    <div v-else class="grid">
       <div
         v-for="surface in filteredSurfaces"
         :key="surface.id"
         :class="['surface-card', 'card', viewMode === 'compact' ? 'surface-card--compact' : '']"
       >
         <div class="card-header">
-          <h3>{{ surface.name }}</h3>
-          <span :class="['status', surface.statusClass]">{{ surface.statusText }}</span>
+          <h3>{{ surface.construction?.address }}</h3>
+          <span :class="['status', statusClass(surface.currentStatus)]">{{ statusText(surface.currentStatus) }}</span>
         </div>
         <div class="card-body">
-          <p class="address">{{ surface.address }}</p>
-          <p class="type">{{ surface.type }}</p>
-          <p class="price">{{ surface.price }} ₽/день</p>
-          <div v-if="surface.currentRental" class="rental-info">
-            <p class="client">{{ surface.currentRental.client }}</p>
-            <p class="dates">{{ surface.currentRental.startDate }} — {{ surface.currentRental.endDate }}</p>
-          </div>
-          <div v-if="surface.downtime" class="downtime-info">
-            <p class="reason">{{ surface.downtime.reason }}</p>
-            <p class="downtime-dates">до {{ surface.downtime.endDate }}</p>
-          </div>
+          <p class="type">{{ surface.construction?.format?.constructionType }} · Сторона {{ surface.side }} · {{ surface.surfaceType === 'Digital' ? 'Цифровая' : 'Статичная' }}</p>
+          <p class="price">{{ surface.currentPrice }} ₽ / {{ surface.currentPriceType === 'PerMonth' ? 'мес' : 'показ' }}</p>
+          <p v-if="surface.loopDuration" class="meta">Петля: {{ surface.loopDuration }} сек · Слот: {{ surface.slotDuration }} сек · Макс. слотов: {{ surface.maxSlots }}</p>
         </div>
         <div class="card-footer">
           <NuxtLink :to="`/surfaces/${surface.id}`" class="btn btn-primary btn-sm">Подробнее</NuxtLink>
           <NuxtLink :to="`/surfaces/${surface.id}/edit`" class="btn btn-secondary btn-sm">Редактировать</NuxtLink>
-          <button
-            class="btn btn-secondary btn-sm"
-            type="button"
-            @click="addToContract(surface.id)"
-          >
+          <button class="btn btn-secondary btn-sm" type="button" @click="addToContract(surface.id)">
             Добавить в договор
           </button>
-          <button class="btn btn-success btn-sm" :disabled="surface.status !== 'free'" @click="rentSurface(surface.id)">
+          <button class="btn btn-success btn-sm" :disabled="surface.currentStatus !== 'Created'" @click="rentSurface(surface.id)">
             Сдать в аренду
-          </button>
-          <button v-if="surface.status === 'free'" class="btn btn-warning btn-sm" @click="markDowntime(surface.id)">
-            Отметить простой
           </button>
         </div>
       </div>
+
+      <div v-if="filteredSurfaces.length === 0" class="state-msg">Поверхности не найдены</div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useCities } from '~/composable/useCities'
+import { useDistricts } from '~/composable/useDistricts'
+import { useFormats } from '~/composable/useFormats'
+import { useSurfaces } from '~/composable/useSurfaces'
 
 const searchQuery = ref('')
 const typeFilter = ref('all')
 const statusFilter = ref('all')
+const priceTypeFilter = ref('all')
+const cityFilter = ref('all')
+const districtFilter = ref('all')
+const formatFilter = ref('all')
 const viewMode = ref('normal')
 
-const surfaces = ref([
-  { id: 1, name: 'Билборд Тверская 15', address: 'г. Москва, ул. Тверская, д.15', type: 'Билборд 3x6', price: 5000, status: 'busy', statusClass: 'status-busy', statusText: 'Занята', currentRental: { client: 'ООО Ромашка', startDate: '01.03.2026', endDate: '15.03.2026' } },
-  { id: 2, name: 'Ситилайт Арбат 10', address: 'г. Москва, ул. Арбат, д.10', type: 'Ситилайт 1.2x1.8', price: 3000, status: 'repair', statusClass: 'status-repair', statusText: 'Простой', downtime: { reason: 'Замена подсветки', endDate: '10.03.2026' } },
-  { id: 3, name: 'Видеоэкран Садовая 5', address: 'г. Москва, ул. Садовая, д.5', type: 'Видеоэкран', price: 8000, status: 'free', statusClass: 'status-free', statusText: 'Свободна' },
-  { id: 4, name: 'Билборд Ленинский 20', address: 'г. Москва, Ленинский пр-т, д.20', type: 'Билборд 3x6', price: 5500, status: 'busy', statusClass: 'status-busy', statusText: 'Занята', currentRental: { client: 'ТехноПлюс', startDate: '01.03.2026', endDate: '10.04.2026' } },
-  { id: 5, name: 'Баннер МКАД 45 км', address: 'МКАД, 45-й км, внешняя сторона', type: 'Баннер 3x12', price: 7000, status: 'free', statusClass: 'status-free', statusText: 'Свободна' }
-])
+const { cities } = useCities()
+const { districts, getDistrictsByCity } = useDistricts()
+const { formats } = useFormats()
+
+const { surfaces, loading: pending, error, fetchSurfaces } = useSurfaces()
+
+// Инициализация загрузки поверхностей
+await fetchSurfaces()
+
+const filteredDistricts = computed(() => {
+  if (cityFilter.value === 'all') {
+    return districts.value
+  }
+  return getDistrictsByCity(cityFilter.value)
+})
 
 const filteredSurfaces = computed(() => {
   return surfaces.value.filter(s => {
     const q = searchQuery.value.toLowerCase()
-    const matchSearch = !q || s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q)
-    const matchType = typeFilter.value === 'all' || s.type.toLowerCase().includes(typeFilter.value.toLowerCase())
-    const matchStatus = statusFilter.value === 'all' || s.status === statusFilter.value
-    return matchSearch && matchType && matchStatus
+    const address = s.construction?.address?.toLowerCase() ?? ''
+    const matchSearch = !q || address.includes(q)
+    const matchCity = cityFilter.value === 'all' || s.construction?.city?.id === Number(cityFilter.value)
+    const matchDistrict = districtFilter.value === 'all' || s.construction?.district?.id === Number(districtFilter.value)
+    const matchFormat = formatFilter.value === 'all' || s.construction?.format?.id === Number(formatFilter.value)
+    const matchType = typeFilter.value === 'all' || s.construction?.format?.constructionType === typeFilter.value
+    const matchStatus = statusFilter.value === 'all' || s.currentStatus === statusFilter.value
+    const matchPrice = priceTypeFilter.value === 'all' || s.currentPriceType === priceTypeFilter.value
+    return matchSearch && matchCity && matchDistrict && matchFormat && matchType && matchStatus && matchPrice
   })
 })
 
+function statusClass(status) {
+  return { Created: 'status-free', UnderRepair: 'status-repair', Decommissioned: 'status-busy' }[status] ?? ''
+}
+
+function statusText(status) {
+  return { Created: 'Активна', UnderRepair: 'На ремонте', Decommissioned: 'Выведена' }[status] ?? status
+}
+
 function resetFilters() {
   searchQuery.value = ''
+  cityFilter.value = 'all'
+  districtFilter.value = 'all'
+  formatFilter.value = 'all'
   typeFilter.value = 'all'
   statusFilter.value = 'all'
+  priceTypeFilter.value = 'all'
 }
 
 function rentSurface(id) {
   navigateTo(`/surfaces/rent/${id}`)
-}
-
-function markDowntime(id) {
-  navigateTo(`/downtime/add?surface=${id}`)
 }
 
 function addToContract(id) {
@@ -146,70 +178,30 @@ function addToContract(id) {
 .page-header { margin-bottom: 1rem; }
 .page-title { font-size: 1.75rem; color: #1a1a2e; font-weight: 600; }
 
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 2px solid #e5e7eb;
-}
-.tab {
-  padding: 0.75rem 1.25rem;
-  color: #6b7280;
-  text-decoration: none;
-  font-weight: 500;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: color 0.2s, border-color 0.2s;
-}
+.tabs { display: flex; gap: 0.25rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb; }
+.tab { padding: 0.75rem 1.25rem; color: #6b7280; text-decoration: none; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.2s, border-color 0.2s; }
 .tab:hover { color: #1e3c72; }
 .tab--active { color: #1e3c72; border-bottom-color: #1e3c72; }
 
 .surface-card { display: flex; flex-direction: column; }
-.surface-card--compact {
-  padding: 0.75rem 1rem;
-}
-.surface-card--compact .card-header {
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.5rem;
-}
-.surface-card--compact .card-body p {
-  font-size: 0.85rem;
-  margin: 0.25rem 0;
-}
-.surface-card--compact .card-footer {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-}
+.surface-card--compact { padding: 0.75rem 1rem; }
+.surface-card--compact .card-header { margin-bottom: 0.5rem; padding-bottom: 0.5rem; }
+.surface-card--compact .card-body p { font-size: 0.85rem; margin: 0.25rem 0; }
+.surface-card--compact .card-footer { margin-top: 0.5rem; padding-top: 0.5rem; }
 .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
 .card-header h3 { font-size: 1.1rem; color: #1a1a2e; }
 .card-body { flex: 1; }
 .card-body p { margin: 0.35rem 0; color: #4b5563; font-size: 0.95rem; }
-.rental-info { background: #f3f4f6; padding: 0.75rem; border-radius: 8px; margin-top: 0.75rem; }
-.downtime-info { background: #fef3c7; padding: 0.75rem; border-radius: 8px; margin-top: 0.75rem; }
 .card-footer { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.875rem; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.view-toggle {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: auto;
-  flex-wrap: wrap;
-}
+.view-toggle { display: flex; gap: 0.5rem; margin-left: auto; flex-wrap: wrap; }
+.view-toggle__btn { padding: 0.5rem 0.9rem; border-radius: 999px; border: 1px solid #d1d5db; background: #fff; font-size: 0.85rem; cursor: pointer; }
+.view-toggle__btn--active { background: #1a1a2e; border-color: #1a1a2e; color: #fff; }
 
-.view-toggle__btn {
-  padding: 0.5rem 0.9rem;
-  border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
+.state-msg { padding: 2rem; text-align: center; color: #6b7280; }
+.error-msg { color: #e53e3e; background: #fff5f5; border-radius: 8px; }
 
-.view-toggle__btn--active {
-  background: #1a1a2e;
-  border-color: #1a1a2e;
-  color: #fff;
-}
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>

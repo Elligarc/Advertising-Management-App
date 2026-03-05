@@ -10,36 +10,28 @@
     </nav>
 
     <div class="filters">
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="Поиск по названию или контактам..."
-        class="search-input"
-      >
+      <input v-model="searchQuery" type="text" placeholder="Поиск по названию или телефону..." class="search-input">
     </div>
 
-    <div class="grid">
+    <div v-if="pending" class="state-msg">Загрузка...</div>
+    <div v-else-if="error" class="state-msg error-msg">Ошибка загрузки клиентов</div>
+    <div v-else-if="filteredClients.length === 0" class="state-msg">
+      <p>Клиенты не найдены</p>
+      <NuxtLink to="/clients/add" class="btn btn-primary">Добавить первого клиента</NuxtLink>
+    </div>
+
+    <div v-else class="grid">
       <div v-for="client in filteredClients" :key="client.id" class="client-card card">
         <div class="card-header">
-          <h3>{{ client.name }}</h3>
-          <span class="client-status" :class="client.activeRentals > 0 ? 'active' : 'inactive'">
-            {{ client.activeRentals > 0 ? 'Активен' : 'Не активен' }}
-          </span>
+          <h3>{{ client.name || 'Без названия' }}</h3>
         </div>
         <div class="card-body">
-          <p class="contact">{{ client.contactPerson }}</p>
-          <p class="phone">{{ client.phone }}</p>
-          <p class="email">{{ client.email }}</p>
-          <div class="stats">
-            <div class="stat"><span class="stat-label">Активных аренд:</span> <span class="stat-value">{{ client.activeRentals }}</span></div>
-            <div class="stat"><span class="stat-label">Всего аренд:</span> <span class="stat-value">{{ client.totalRentals }}</span></div>
-            <div class="stat"><span class="stat-label">На сумму:</span> <span class="stat-value">{{ client.totalSpent }} ₽</span></div>
-          </div>
+          <p class="phone"><span class="label">Телефон:</span> {{ client.phone || 'Не указан' }}</p>
         </div>
         <div class="card-footer">
           <NuxtLink :to="`/clients/${client.id}`" class="btn btn-primary btn-sm">Карточка</NuxtLink>
           <NuxtLink :to="`/clients/${client.id}/edit`" class="btn btn-secondary btn-sm">Редактировать</NuxtLink>
-          <button class="btn btn-success btn-sm" @click="newRental(client.id)">Новая аренда</button>
+          <button class="btn btn-success btn-sm" @click="navigateTo(`/surfaces?rentClient=${client.id}`)">Новая аренда</button>
         </div>
       </div>
     </div>
@@ -47,63 +39,43 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-
+const API = 'http://localhost:5000'
 const searchQuery = ref('')
 
-const clients = ref([
-  { id: 1, name: 'ООО "Ромашка"', contactPerson: 'Иванов Иван Иванович', phone: '+7 (999) 123-45-67', email: 'ivan@romashka.ru', inn: '7712345678', address: 'г. Москва, ул. Цветной бульвар, д.10', activeRentals: 3, totalRentals: 12, totalSpent: 1250000 },
-  { id: 2, name: 'ООО "ТехноПлюс"', contactPerson: 'Петров Петр Петрович', phone: '+7 (999) 765-43-21', email: 'petrov@techno.ru', inn: '7723456789', address: 'г. Москва, ул. Новый Арбат, д.5', activeRentals: 1, totalRentals: 5, totalSpent: 480000 },
-  { id: 3, name: 'ИП Сидоров', contactPerson: 'Сидоров Сидор', phone: '+7 (999) 111-22-33', email: 'sidorov@mail.ru', inn: '7734567890', address: 'г. Москва, ул. Ленина, д.1', activeRentals: 0, totalRentals: 2, totalSpent: 120000 }
-])
-
-const filteredClients = computed(() => {
-  const q = searchQuery.value.toLowerCase()
-  if (!q) return clients.value
-  return clients.value.filter(c =>
-    c.name.toLowerCase().includes(q) ||
-    (c.contactPerson && c.contactPerson.toLowerCase().includes(q)) ||
-    (c.phone && c.phone.includes(q)) ||
-    (c.email && c.email.toLowerCase().includes(q))
-  )
+const { data: clients, pending, error } = await useFetch(`${API}/api/Clients`, {
+  default: () => []
 })
 
-function newRental(id) {
-  navigateTo(`/surfaces?rentClient=${id}`)
-}
+const filteredClients = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  if (!q) return clients.value
+  return clients.value.filter(c =>
+    c.name?.toLowerCase().includes(q) || c.phone?.includes(q)
+  )
+})
 </script>
 
 <style scoped>
 .clients-page { animation: fadeIn 0.3s ease; }
 .page-header { margin-bottom: 1rem; }
 .page-title { font-size: 1.75rem; color: #1a1a2e; font-weight: 600; }
-
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 2px solid #e5e7eb;
-}
-.tab {
-  padding: 0.75rem 1.25rem;
-  color: #6b7280;
-  text-decoration: none;
-  font-weight: 500;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: color 0.2s, border-color 0.2s;
-}
+.tabs { display: flex; gap: 0.25rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e5e7eb; }
+.tab { padding: 0.75rem 1.25rem; color: #6b7280; text-decoration: none; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
 .tab:hover { color: #1e3c72; }
 .tab--active { color: #1e3c72; border-bottom-color: #1e3c72; }
-
-.client-status { padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
-.client-status.active { background: #d1fae5; color: #065f46; }
-.client-status.inactive { background: #e5e7eb; color: #6b7280; }
+.filters { margin-bottom: 1.5rem; }
+.search-input { width: 100%; max-width: 400px; padding: 0.75rem 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; }
+.search-input:focus { outline: none; border-color: #1e3c72; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+.client-card { display: flex; flex-direction: column; }
+.card-header { padding: 1.5rem 1.5rem 0.5rem; }
+.card-header h3 { margin: 0; color: #1a1a2e; font-size: 1.1rem; font-weight: 600; }
+.card-body { padding: 0.5rem 1.5rem; flex: 1; }
 .card-body p { margin: 0.35rem 0; color: #4b5563; font-size: 0.95rem; }
-.stats { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #e5e7eb; display: flex; flex-wrap: wrap; gap: 1rem; }
-.stat-label { color: #6b7280; font-size: 0.85rem; }
-.stat-value { font-weight: 600; color: #1a1a2e; }
-.card-footer { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
+.label { font-weight: 500; color: #6b7280; margin-right: 0.25rem; }
+.card-footer { display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 1rem 1.5rem; border-top: 1px solid #e5e7eb; }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.875rem; }
+.state-msg { padding: 2rem; text-align: center; color: #6b7280; }
+.error-msg { color: #e53e3e; background: #fff5f5; border-radius: 8px; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>

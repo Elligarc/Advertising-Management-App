@@ -1,212 +1,233 @@
 <template>
   <div class="contracts-page">
     <div class="page-header">
-      <h1 class="page-title">Договоры</h1>
-      <NuxtLink to="/contracts/add" class="btn btn-primary">Новый договор</NuxtLink>
+      <h1>Договоры</h1>
+      <NuxtLink to="/contracts/add" class="btn btn-primary">
+        Создать договор
+      </NuxtLink>
     </div>
 
-    <div class="filters">
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="Поиск по номеру или клиенту..."
-        class="search-input"
-      >
-      <select v-model="statusFilter" class="select-filter">
-        <option value="all">Все статусы</option>
-        <option value="active">Активные</option>
-        <option value="planned">Запланированные</option>
-        <option value="finished">Завершённые</option>
-      </select>
+    <div v-if="loading" class="loading">
+      Загрузка договоров...
     </div>
 
-    <div class="contracts-table card">
-      <table>
-        <thead>
-          <tr>
-            <th>№</th>
-            <th>Клиент</th>
-            <th>Период</th>
-            <th>Поверхностей</th>
-            <th>Сумма</th>
-            <th>Статус</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="contract in filteredContracts" :key="contract.id">
-            <td>{{ contract.number }}</td>
-            <td>{{ contract.client }}</td>
-            <td>{{ contract.startDate }} — {{ contract.endDate }}</td>
-            <td>{{ contract.surfacesCount }}</td>
-            <td>{{ contract.total }} ₽</td>
-            <td>
-              <span class="status-badge" :class="`status-badge--${contract.status}`">
-                {{ statusText(contract.status) }}
-              </span>
-            </td>
-            <td class="actions">
-              <NuxtLink :to="`/contracts/${contract.id}`" class="btn btn-secondary btn-sm">Открыть</NuxtLink>
-            </td>
-          </tr>
-          <tr v-if="filteredContracts.length === 0">
-            <td colspan="7" class="empty">Договоров пока нет.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="error" class="error">
+      {{ error }}
+    </div>
+
+    <div v-if="!loading && !error && contracts.length === 0" class="empty-state">
+      Договоров пока нет
+    </div>
+
+    <div v-else-if="contracts.length > 0" class="contracts-list">
+      <div v-for="contract in contracts" :key="contract.id" class="contract-card">
+        <div class="contract-header">
+          <div class="contract-info">
+            <h3>Договор №{{ contract.id }}</h3>
+            <p class="client-name">{{ contract.clientName }}</p>
+            <div class="contract-dates">
+              <span class="date-label">С:</span>
+              <span>{{ formatDate(contract.startDate) }}</span>
+              <span class="date-label">По:</span>
+              <span>{{ formatDate(contract.endDate) }}</span>
+            </div>
+          </div>
+          <div class="contract-actions">
+            <NuxtLink :to="`/contracts/${contract.id}`" class="btn btn-secondary">
+              Детали
+            </NuxtLink>
+          </div>
+        </div>
+        <div class="contract-footer">
+          <span class="status" :class="contract.status.toLowerCase()">
+            {{ getStatusText(contract.status) }}
+          </span>
+          <span class="total-price">
+            Сумма: {{ formatPrice(contract.totalPrice) }}
+          </span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { useContracts } from '~/composable/useContracts'
 
-const searchQuery = ref('')
-const statusFilter = ref('all')
+const { contracts, loading, error, fetchContracts } = useContracts()
 
-const contracts = ref([
-  {
-    id: 1,
-    number: 'Д-001/26',
-    client: 'ООО "Ромашка"',
-    startDate: '01.03.2026',
-    endDate: '31.03.2026',
-    surfacesCount: 3,
-    total: 320000,
-    status: 'active'
-  },
-  {
-    id: 2,
-    number: 'Д-002/26',
-    client: 'ООО "ТехноПлюс"',
-    startDate: '01.04.2026',
-    endDate: '30.06.2026',
-    surfacesCount: 2,
-    total: 580000,
-    status: 'planned'
-  },
-  {
-    id: 3,
-    number: 'Д-099/25',
-    client: 'ИП Сидоров',
-    startDate: '01.01.2025',
-    endDate: '31.12.2025',
-    surfacesCount: 1,
-    total: 240000,
-    status: 'finished'
-  }
-])
-
-const filteredContracts = computed(() => {
-  const q = searchQuery.value.toLowerCase()
-  return contracts.value.filter(c => {
-    const matchSearch =
-      !q ||
-      c.number.toLowerCase().includes(q) ||
-      c.client.toLowerCase().includes(q)
-    const matchStatus =
-      statusFilter.value === 'all' || c.status === statusFilter.value
-    return matchSearch && matchStatus
-  })
+onMounted(() => {
+  fetchContracts()
 })
 
-function statusText(status) {
-  if (status === 'active') return 'Активен'
-  if (status === 'planned') return 'Запланирован'
-  return 'Завершён'
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('ru-RU')
+}
+
+const formatPrice = (price) => {
+  if (!price) return '0 ₽'
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    minimumFractionDigits: 0
+  }).format(price)
+}
+
+const getStatusText = (status) => {
+  const statusMap = {
+    'Created': 'Создан',
+    'Active': 'Активен',
+    'Cancelled': 'Отменен'
+  }
+  return statusMap[status] || status
 }
 </script>
 
 <style scoped>
 .contracts-page {
-  animation: fadeIn 0.3s ease;
+  padding: 20px;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 20px;
 }
 
-.page-title {
-  font-size: 1.75rem;
-  color: #1a1a2e;
-  font-weight: 600;
+.page-header h1 {
+  margin: 0;
+  color: #333;
 }
 
-.contracts-table table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.95rem;
+.contracts-list {
+  display: grid;
+  gap: 16px;
 }
 
-th,
-td {
-  padding: 0.6rem 0.75rem;
-  text-align: left;
+.contract-card {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
 }
 
-thead tr {
-  border-bottom: 1px solid #e5e7eb;
+.contract-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
 }
 
-tbody tr + tr {
-  border-top: 1px solid #f3f4f6;
+.contract-info h3 {
+  margin: 0 0 8px 0;
+  color: #333;
 }
 
-th {
-  font-weight: 600;
-  color: #6b7280;
-  font-size: 0.85rem;
+.client-name {
+  margin: 0 0 8px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.contract-dates {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #888;
+}
+
+.date-label {
+  font-weight: bold;
+}
+
+.contract-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.contract-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
   text-transform: uppercase;
 }
 
-td {
-  color: #1f2933;
+.status.created {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
 }
 
-.actions {
-  text-align: right;
+.status.active {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
 }
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
+.status.cancelled {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
 }
 
-.status-badge--active {
-  background: #d1fae5;
-  color: #065f46;
+.total-price {
+  font-weight: bold;
+  color: #333;
 }
 
-.status-badge--planned {
-  background: #e0f2fe;
-  color: #0369a1;
-}
-
-.status-badge--finished {
-  background: #e5e7eb;
-  color: #4b5563;
-}
-
-.empty {
+.loading, .error, .empty-state {
   text-align: center;
-  color: #6b7280;
-  padding: 1.25rem 0;
+  padding: 40px;
+  color: #666;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.error {
+  color: #dc3545;
+}
+
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+  border-color: #6c757d;
+}
+
+.btn-secondary:hover {
+  background-color: #545b62;
+  border-color: #545b62;
 }
 </style>
-
