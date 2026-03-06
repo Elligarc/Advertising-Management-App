@@ -1,41 +1,56 @@
 <template>
   <div class="contract-details-page">
-    <div class="page-header">
-      <div class="contract-info">
-        <h1>Договор №{{ contract.id }}</h1>
-        <div class="client-info">
-          <span class="label">Клиент:</span>
-          <span class="value">{{ contract.clientName }}</span>
+    <!-- Проверка на наличие данных о договоре -->
+    <div v-if="!contract" class="error">
+      Договор не найден или данные не загружены
+    </div>
+
+    <div v-else>
+      <div class="page-header">
+        <div class="contract-info">
+          <h1>Договор №{{ contract.id }}</h1>
+          <div class="client-info">
+            <span class="label">Клиент:</span>
+            <span class="value">{{ contract.clientName }}</span>
+          </div>
+          <div class="contract-dates">
+            <span class="label">С:</span>
+            <span class="value">{{ formatDate(contract.startDate) }}</span>
+            <span class="label">По:</span>
+            <span class="value">{{ formatDate(contract.endDate) }}</span>
+          </div>
         </div>
-        <div class="contract-dates">
-          <span class="label">С:</span>
-          <span class="value">{{ formatDate(contract.startDate) }}</span>
-          <span class="label">По:</span>
-          <span class="value">{{ formatDate(contract.endDate) }}</span>
+<div class="contract-actions">
+          <span class="status" :class="contract.status.toLowerCase()">
+            {{ getStatusText(contract.status) }}
+          </span>
+          <span class="total-price">
+            Сумма: {{ formatPrice(contract.totalPrice) }}
+          </span>
+          <button 
+            v-if="contract.status === 'Created'" 
+            @click="handleDeleteContract" 
+            class="btn btn-danger"
+          >
+            Удалить
+          </button>
         </div>
       </div>
-      <div class="contract-actions">
-        <span class="status" :class="contract.status.toLowerCase()">
-          {{ getStatusText(contract.status) }}
-        </span>
-        <span class="total-price">
-          Сумма: {{ formatPrice(contract.totalPrice) }}
-        </span>
+
+      <div v-if="loading" class="loading">
+        Загрузка данных договора...
       </div>
-    </div>
 
-    <div v-if="loading" class="loading">
-      Загрузка...
-    </div>
+      <div v-if="error" class="error">
+        <strong>Ошибка загрузки:</strong> {{ error }}
+        <br>
+        <small>Проверьте консоль разработчика для подробной информации</small>
+      </div>
 
-    <div v-if="error" class="error">
-      {{ error }}
-    </div>
-
-    <!-- Форма добавления поверхности -->
-    <div class="add-surface-section">
-      <h2>Добавить поверхность</h2>
-      <form @submit.prevent="addSurfaceToContract" class="surface-form">
+      <!-- Форма добавления поверхности -->
+      <div class="add-surface-section">
+        <h2>Добавить поверхность</h2>
+        <form @submit.prevent="addSurfaceToContract" class="surface-form">
         <div class="form-row">
           <div class="form-group">
             <label for="surface">Поверхность</label>
@@ -120,28 +135,16 @@
     <div v-if="contract.items && contract.items.length > 0" class="contract-items">
       <h2>Поверхности в договоре</h2>
       <div class="items-list">
-        <div v-for="item in contract.items" :key="item.id" class="item-card">
-          <div class="item-info">
-            <div class="surface-details">
-              <h4>{{ getSurfaceLabel(item.surface) }}</h4>
-              <p class="construction-address">{{ item.surface.construction.address }}</p>
-            </div>
-            <div class="item-dates">
-              <span class="date-label">С:</span>
-              <span>{{ formatDate(item.startDate) }}</span>
-              <span class="date-label">По:</span>
-              <span>{{ formatDate(item.endDate) }}</span>
-            </div>
-          </div>
-          <div class="item-footer">
-            <span class="price">
-              Цена: {{ formatPrice(item.price) }} ({{ getPriceTypeText(item.priceType) }})
-            </span>
-            <span class="total-price">
-              Сумма: {{ formatPrice(item.totalPrice) }}
-            </span>
-          </div>
-        </div>
+        <ContractItem 
+          v-for="item in contract.items" 
+          :key="item.id" 
+          :surface="item.surface"
+          :start-date="item.startDate"
+          :end-date="item.endDate"
+          :price="item.price"
+          :price-type="item.priceType"
+          :total-price="item.totalPrice"
+        />
       </div>
     </div>
 
@@ -149,19 +152,23 @@
       В договоре пока нет поверхностей
     </div>
   </div>
+</div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useContracts } from '~/composable/useContracts'
 import { useSurfaces } from '~/composable/useSurfaces'
+import ContractItem from '~/components/ContractItem.vue'
+
+const router = useRouter()
 
 const route = useRoute()
 const contractId = route.params.id
 
-const { contract, loading, error, getContract, addSurfaceToContract: addSurfaceToContractApi } = useContracts()
-const { surfaces, fetchSurfaces } = useSurfaces()
+const { contracts, contractsLoading, contractsError, getContract, addContractItem, deleteContract } = useContracts()
+const { surfaces, surfacesLoading, surfacesError, fetchSurfaces } = useSurfaces()
 
 const surfaceForm = ref({
   surfaceId: '',
@@ -171,21 +178,63 @@ const surfaceForm = ref({
   priceType: 'PerShow'
 })
 
+const contract = ref(null)
+const pageLoading = ref(true)
+const pageError = ref(null)
+
 onMounted(async () => {
-  await Promise.all([
-    getContract(contractId),
-    fetchSurfaces()
-  ])
+  console.log('=== Монтируем компонент деталей договора ===')
+  console.log('ID договора из маршрута:', contractId)
+  console.log('Тип contractId:', typeof contractId)
+  console.log('Route params:', route.params)
+
+  // Валидация ID
+  if (!contractId || isNaN(parseInt(contractId))) {
+    console.error('=== Ошибка: некорректный ID договора ===')
+    pageError.value = 'Некорректный ID договора'
+    pageLoading.value = false
+    return
+  }
+
+  try {
+    console.log('=== Начинаем загрузку данных ===')
+    console.log('=== Загружаем договор ===')
+    const loadedContract = await getContract(parseInt(contractId))
+    console.log('=== Загружаем поверхности ===')
+    await fetchSurfaces()
+    console.log('=== Данные успешно загружены ===')
+    console.log('Загруженный договор:', loadedContract)
+    contract.value = loadedContract
+    pageLoading.value = false
+  } catch (err) {
+    console.error('=== Ошибка при загрузке данных ===')
+    console.error('Ошибка:', err)
+    console.error('Тип ошибки:', err?.constructor?.name)
+    console.error('Сообщение об ошибке:', err instanceof Error ? err.message : String(err))
+
+    if (err?.response?.status === 404) {
+      pageError.value = 'Договор не найден'
+    } else {
+      pageError.value = err instanceof Error ? err.message : 'Ошибка загрузки данных'
+    }
+    pageLoading.value = false
+  }
 })
 
 const addSurfaceToContract = async () => {
+  console.log('=== Добавляем поверхность к договору ===')
+  console.log('FormData:', surfaceForm.value)
+  
   if (!surfaceForm.value.surfaceId || !surfaceForm.value.startDate || !surfaceForm.value.endDate || !surfaceForm.value.price) {
+    console.error('=== Ошибка валидации ===')
+    console.error('Не все поля заполнены')
     alert('Пожалуйста, заполните все поля')
     return
   }
 
   try {
-    await addSurfaceToContractApi(contractId, {
+    console.log('=== Отправляем запрос на добавление поверхности ===')
+    console.log('Данные для отправки:', {
       surfaceId: parseInt(surfaceForm.value.surfaceId),
       startDate: surfaceForm.value.startDate,
       endDate: surfaceForm.value.endDate,
@@ -193,7 +242,18 @@ const addSurfaceToContract = async () => {
       priceType: surfaceForm.value.priceType
     })
     
+    await addContractItem(parseInt(contractId), {
+      surfaceId: parseInt(surfaceForm.value.surfaceId),
+      startDate: surfaceForm.value.startDate,
+      endDate: surfaceForm.value.endDate,
+      price: parseFloat(surfaceForm.value.price),
+      priceType: surfaceForm.value.priceType
+    })
+    
+    console.log('=== Поверхность успешно добавлена ===')
+    
     // Обновляем данные договора
+    console.log('=== Обновляем данные договора ===')
     await getContract(contractId)
     
     // Сбрасываем форму
@@ -204,8 +264,16 @@ const addSurfaceToContract = async () => {
       price: 0,
       priceType: 'PerShow'
     }
+    
+    console.log('=== Форма сброшена ===')
   } catch (err) {
-    alert(err.message || 'Ошибка добавления поверхности')
+    console.error('=== Ошибка при добавлении поверхности ===')
+    console.error('Ошибка:', err)
+    console.error('Тип ошибки:', err?.constructor?.name)
+    console.error('Сообщение об ошибке:', err instanceof Error ? err.message : String(err))
+    
+    const errorMessage = err instanceof Error ? err.message : 'Ошибка добавления поверхности'
+    alert(errorMessage)
   }
 }
 
@@ -223,25 +291,61 @@ const isSurfaceAlreadyAdded = (surfaceId) => {
 }
 
 const getSurfaceLabel = (surface) => {
-  return `${surface.construction.address}, ${surface.side} сторона, ${surface.surfaceType}`
+  return `${surface.address}, ${surface.construction.name}`
 }
 
-const getPriceTypeText = (priceType) => {
-  return priceType === 'PerShow' ? 'За показ' : 'За месяц'
+const handleDeleteContract = async () => {
+  console.log('=== Обрабатываем удаление договора ===')
+  console.log('Contract value:', contract.value)
+  
+  if (!contract.value) {
+    console.error('=== Ошибка: договор не найден ===')
+    alert('Договор не найден')
+    return
+  }
+  
+  console.log(`=== ID договора для удаления: ${contract.value.id} ===`)
+  const confirmed = confirm(`Вы уверены, что хотите удалить договор №${contract.value.id}?`)
+  if (!confirmed) {
+    console.log('=== Удаление отменено пользователем ===')
+    return
+  }
+  
+  try {
+    console.log('=== Отправляем запрос на удаление договора ===')
+    await deleteContract(contract.value.id)
+    console.log('=== Договор успешно удален ===')
+    // Перенаправляем на список договоров
+    console.log('=== Перенаправляем на список договоров ===')
+    router.push('/contracts')
+  } catch (err) {
+    console.error('=== Ошибка при удалении договора ===')
+    console.error('Ошибка:', err)
+    console.error('Тип ошибки:', err?.constructor?.name)
+    console.error('Сообщение об ошибке:', err instanceof Error ? err.message : String(err))
+    
+    const errorMessage = err instanceof Error ? err.message : 'Ошибка удаления договора'
+    alert(errorMessage)
+  }
 }
 
+// Функции для форматирования
 const formatDate = (dateString) => {
   if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleDateString('ru-RU')
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('ru-RU')
+  } catch {
+    return String(dateString)
+  }
 }
 
 const formatPrice = (price) => {
-  if (!price) return '0 ₽'
+  if (!price && price !== 0) return '0 ₽'
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
     currency: 'RUB',
-    minimumFractionDigits: 0
+    minimumFractionDigits: 2
   }).format(price)
 }
 
@@ -254,7 +358,6 @@ const getStatusText = (status) => {
   return statusMap[status] || status
 }
 </script>
-
 <style scoped>
 .contract-details-page {
   padding: 20px;

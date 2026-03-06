@@ -13,7 +13,6 @@
         <NuxtLink to="/clients" class="nav-link" active-class="active">Клиенты</NuxtLink>
         <NuxtLink to="/contracts" class="nav-link" active-class="active">Договоры</NuxtLink>
         <NuxtLink to="/downtime" class="nav-link" active-class="active">Простои</NuxtLink>
-        <NuxtLink to="/calendar" class="nav-link" active-class="active">Календарь</NuxtLink>
       </nav>
       <div class="user">
         <span class="user-name">Менеджер</span>

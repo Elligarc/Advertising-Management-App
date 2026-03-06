@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тестирование функций договоров</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .control-group h3 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 16px;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button.secondary {
+            background-color: #6c757d;
+        }
+        
+        button.secondary:hover {
+            background-color: #545b62;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .console-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .api-info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Тестирование функций договоров</h1>
+        
+        <div class="api-info">
+            <h3>Информация об API</h3>
+            <p><strong>API Base:</strong> <span id="api-base-display">http://localhost:5000</span></p>
+            <p><strong>Статус подключения:</strong> <span id="api-status">Проверяется...</span></p>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <h3>Базовые операции</h3>
+                <button onclick="runTests()">Запустить все тесты</button>
+                <button onclick="testGetContracts()" class="secondary">Получить список договоров</button>
+                <button onclick="testCreateContract()" class="secondary">Создать договор</button>
+            </div>
+            
+            <div class="control-group">
+                <h3>Работа с конкретным договором</h3>
+                <input type="number" id="contract-id-input" placeholder="Введите ID договора">
+                <button onclick="testGetContract()">Получить договор</button>
+                <button onclick="testDeleteContract()" class="secondary">Удалить договор</button>
+            </div>
+            
+            <div class="control-group">
+                <h3>Добавление поверхности</h3>
+                <input type="number" id="surface-id-input" placeholder="ID поверхности">
+                <input type="date" id="start-date-input" placeholder="Дата начала">
+                <input type="date" id="end-date-input" placeholder="Дата окончания">
+                <input type="number" id="price-input" placeholder="Цена">
+                <select id="price-type-input">
+                    <option value="PerShow">За показ</option>
+                    <option value="PerMonth">За месяц</option>
+                </select>
+                <button onclick="testAddSurfaceToContract()">Добавить поверхность</button>
+            </div>
+        </div>
+        
+        <div id="status-message" class="status info" style="display: none;"></div>
+        
+        <div class="container">
+            <h3>Консоль вывода</h3>
+            <div id="console-output" class="console-output"></div>
+        </div>
+    </div>
+
+    <script src="test-contract-functions.js"></script>
+    <script>
+        // Дополнительные функции для управления тестами
+        let consoleOutput = document.getElementById('console-output');
+        let statusMessage = document.getElementById('status-message');
+        
+        // Перехватываем console.log для отображения в интерфейсе
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            appendToConsole('LOG', args.join(' '));
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            appendToConsole('ERROR', args.join(' '));
+        };
+        
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            appendToConsole('WARN', args.join(' '));
+        };
+        
+        function appendToConsole(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `[${timestamp}] ${type}: ${message}\n`;
+            consoleOutput.textContent += entry;
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+        
+        function showStatus(type, message) {
+            statusMessage.className = `status ${type}`;
+            statusMessage.textContent = message;
+            statusMessage.style.display = 'block';
+            
+            // Автоматическое скрытие через 5 секунд
+            setTimeout(() => {
+                statusMessage.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Функции для кнопок
+        async function testGetContracts() {
+            showStatus('info', 'Получение списка договоров...');
+            const result = await window.contractTests.testGetContracts();
+            if (result) {
+                showStatus('success', `Получено ${result.length} договоров`);
+            } else {
+                showStatus('error', 'Ошибка получения списка договоров');
+            }
+        }
+        
+        async function testGetContract() {
+            const id = document.getElementById('contract-id-input').value;
+            if (!id) {
+                showStatus('error', 'Введите ID договора');
+                return;
+            }
+            
+            showStatus('info', `Получение договора с ID ${id}...`);
+            const result = await window.contractTests.testGetContract(parseInt(id));
+            if (result) {
+                showStatus('success', 'Договор успешно получен');
+            } else {
+                showStatus('error', 'Ошибка получения договора');
+            }
+        }
+        
+        async function testCreateContract() {
+            showStatus('info', 'Создание нового договора...');
+            const result = await window.contractTests.testCreateContract();
+            if (result) {
+                showStatus('success', `Договор создан с ID: ${result.id}`);
+                // Обновляем поле ввода ID для дальнейших тестов
+                document.getElementById('contract-id-input').value = result.id;
+            } else {
+                showStatus('error', 'Ошибка создания договора');
+            }
+        }
+        
+        async function testAddSurfaceToContract() {
+            const contractId = document.getElementById('contract-id-input').value;
+            const surfaceId = document.getElementById('surface-id-input').value;
+            const startDate = document.getElementById('start-date-input').value;
+            const endDate = document.getElementById('end-date-input').value;
+            const price = document.getElementById('price-input').value;
+            const priceType = document.getElementById('price-type-input').value;
+            
+            if (!contractId || !surfaceId || !startDate || !endDate || !price) {
+                showStatus('error', 'Заполните все поля');
+                return;
+            }
+            
+            showStatus('info', 'Добавление поверхности к договору...');
+            const result = await window.contractTests.testAddSurfaceToContract(
+                parseInt(contractId),
+                parseInt(surfaceId),
+                startDate,
+                endDate,
+                parseFloat(price),
+                priceType
+            );
+            if (result) {
+                showStatus('success', 'Поверхность успешно добавлена');
+            } else {
+                showStatus('error', 'Ошибка добавления поверхности');
+            }
+        }
+        
+        async function testDeleteContract() {
+            const id = document.getElementById('contract-id-input').value;
+            if (!id) {
+                showStatus('error', 'Введите ID договора');
+                return;
+            }
+            
+            if (!confirm(`Вы уверены, что хотите удалить договор с ID ${id}?`)) {
+                return;
+            }
+            
+            showStatus('info', `Удаление договора с ID ${id}...`);
+            const result = await window.contractTests.testDeleteContract(parseInt(id));
+            if (result) {
+                showStatus('success', 'Договор успешно удален');
+            } else {
+                showStatus('error', 'Ошибка удаления договора');
+            }
+        }
+        
+        async function runTests() {
+            showStatus('info', 'Запуск всех тестов...');
+            await window.contractTests.runTests();
+            showStatus('success', 'Тесты завершены');
+        }
+        
+        // Проверка подключения к API при загрузке
+        async function checkAPIConnection() {
+            try {
+                const response = await fetch('http://localhost:5000/api/contracts');
+                if (response.ok) {
+                    document.getElementById('api-status').textContent = 'Подключено';
+                    document.getElementById('api-status').style.color = '#28a745';
+                } else {
+                    document.getElementById('api-status').textContent = 'Ошибка подключения';
+                    document.getElementById('api-status').style.color = '#dc3545';
+                }
+            } catch (error) {
+                document.getElementById('api-status').textContent = 'Сервер недоступен';
+                document.getElementById('api-status').style.color = '#dc3545';
+            }
+        }
+        
+        // Запускаем проверку при загрузке страницы
+        document.addEventListener('DOMContentLoaded', checkAPIConnection);
+    </script>
+</body>
+</html>

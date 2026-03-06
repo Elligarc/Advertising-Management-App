@@ -12,35 +12,16 @@
       {{ error }}
     </div>
 
-    <form @submit.prevent="createContract" class="contract-form">
-      <div class="form-group">
-        <label for="client">Клиент</label>
-        <select 
-          id="client" 
-          v-model="formData.clientId" 
-          required
-          class="form-control"
-        >
-          <option value="">Выберите клиента</option>
-          <option 
-            v-for="client in clients" 
-            :key="client.id" 
-            :value="client.id"
-          >
-            {{ client.name }} ({{ client.phone }})
-          </option>
-        </select>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary" :disabled="loading">
-          Создать договор
-        </button>
+    <ContractForm 
+      submit-text="Создать договор"
+      @submit="handleFormSubmit"
+    >
+      <template #cancel>
         <NuxtLink to="/contracts" class="btn btn-secondary">
           Отмена
         </NuxtLink>
-      </div>
-    </form>
+      </template>
+    </ContractForm>
   </div>
 </template>
 
@@ -49,24 +30,30 @@ import { ref, onMounted } from 'vue'
 import { useClients } from '~/composable/useClients'
 import { useContracts } from '~/composable/useContracts'
 import { useRouter } from 'vue-router'
+import ContractForm from '~/components/ContractForm.vue'
 
 const router = useRouter()
-const { clients, loading: clientsLoading, error: clientsError, fetchClients } = useClients()
+const { clients, clientsLoading, clientsError, fetchClients } = useClients()
 const { createContract: createContractApi, loading: contractLoading, error: contractError } = useContracts()
-
-const formData = ref({
-  clientId: ''
-})
 
 const loading = ref(false)
 const error = ref(null)
+const formData = ref({
+  clientId: ''
+})
 
 onMounted(async () => {
   await fetchClients()
 })
 
-const createContract = async () => {
+const handleFormSubmit = async () => {
+  console.log('=== Обрабатываем событие submit из ContractForm ===')
+  console.log('=== Начинаем создание договора ===')
+  console.log('FormData:', formData.value)
+
   if (!formData.value.clientId) {
+    console.error('=== Ошибка валидации ===')
+    console.error('Не выбран клиент')
     error.value = 'Пожалуйста, выберите клиента'
     return
   }
@@ -75,20 +62,32 @@ const createContract = async () => {
   error.value = null
 
   try {
-    const contract = await createContractApi({
+    console.log('=== Отправляем запрос на создание договора ===')
+    console.log('Данные для создания:', {
       clientId: parseInt(formData.value.clientId)
     })
-    
-    // Перенаправляем на страницу деталей созданного договора
-    router.push(`/contracts/${contract.id}`)
+    const createdContract = await createContractApi({
+      clientId: parseInt(formData.value.clientId)
+    })
+    console.log('=== Договор успешно создан ===')
+    console.log('ID созданного договора:', createdContract.id)
+
+    // Перенаправляем на детальную страницу созданного договора
+    console.log('=== Перенаправляем на детальную страницу договора ===')
+    router.push(`/contracts/${createdContract.id}`)
   } catch (err) {
-    error.value = err.message || 'Ошибка создания договора'
+    console.error('=== Ошибка при создании договора ===')
+    console.error('Ошибка:', err)
+    console.error('Тип ошибки:', err?.constructor?.name)
+    console.error('Сообщение об ошибке:', err instanceof Error ? err.message : String(err))
+
+    const errorMessage = err instanceof Error ? err.message : 'Ошибка создания договора'
+    error.value = errorMessage
   } finally {
     loading.value = false
   }
 }
 </script>
-
 <style scoped>
 .add-contract-page {
   padding: 20px;

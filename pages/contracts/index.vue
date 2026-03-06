@@ -20,71 +20,36 @@
     </div>
 
     <div v-else-if="contracts.length > 0" class="contracts-list">
-      <div v-for="contract in contracts" :key="contract.id" class="contract-card">
-        <div class="contract-header">
-          <div class="contract-info">
-            <h3>Договор №{{ contract.id }}</h3>
-            <p class="client-name">{{ contract.clientName }}</p>
-            <div class="contract-dates">
-              <span class="date-label">С:</span>
-              <span>{{ formatDate(contract.startDate) }}</span>
-              <span class="date-label">По:</span>
-              <span>{{ formatDate(contract.endDate) }}</span>
-            </div>
-          </div>
-          <div class="contract-actions">
-            <NuxtLink :to="`/contracts/${contract.id}`" class="btn btn-secondary">
-              Детали
-            </NuxtLink>
-          </div>
-        </div>
-        <div class="contract-footer">
-          <span class="status" :class="contract.status.toLowerCase()">
-            {{ getStatusText(contract.status) }}
-          </span>
-          <span class="total-price">
-            Сумма: {{ formatPrice(contract.totalPrice) }}
-          </span>
-        </div>
-      </div>
+      <ContractCard 
+        v-for="contract in contracts" 
+        :key="contract.id" 
+        :contract="contract"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
 import { useContracts } from '~/composable/useContracts'
+import ContractCard from '~/components/ContractCard.vue'
 
-const { contracts, loading, error, fetchContracts } = useContracts()
+const { contracts, loading, error, getContracts } = useContracts()
 
-onMounted(() => {
-  fetchContracts()
-})
-
-const formatDate = (dateString) => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleDateString('ru-RU')
-}
-
-const formatPrice = (price) => {
-  if (!price) return '0 ₽'
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    minimumFractionDigits: 0
-  }).format(price)
-}
-
-const getStatusText = (status) => {
-  const statusMap = {
-    'Created': 'Создан',
-    'Active': 'Активен',
-    'Cancelled': 'Отменен'
+onMounted(async () => {
+  console.log('=== Монтируем список договоров ===')
+  try {
+    console.log('=== Загружаем список договоров ===')
+    await getContracts()
+    console.log('=== Список договоров успешно загружен ===')
+    console.log('Количество договоров:', contracts.value?.length || 0)
+  } catch (err) {
+    console.error('=== Ошибка при загрузке списка договоров ===')
+    console.error('Ошибка:', err)
+    console.error('Тип ошибки:', err?.constructor?.name)
+    console.error('Сообщение об ошибке:', err instanceof Error ? err.message : String(err))
   }
-  return statusMap[status] || status
-}
+})
 </script>
-
 <style scoped>
 .contracts-page {
   padding: 20px;
