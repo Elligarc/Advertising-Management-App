@@ -35,6 +35,16 @@ builder.Services.AddSwaggerGen(c =>
         new OpenApiInfo { Title = "Advertising API", Version = "v1" });
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()   // Разрешить запросы с любого источника
+            .AllowAnyMethod()   // Разрешить любые методы (GET, POST, и т.д.)
+            .AllowAnyHeader();  // Разрешить любые заголовки
+    });
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -45,8 +55,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Advertising API v1"));
 }
 
+app.UseRouting();
+app.UseCors("AllowAll");
 app.UseAuthorization();
-
 app.MapControllers();
 
 // Инициализация начальных данных
